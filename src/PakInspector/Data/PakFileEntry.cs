@@ -1,4 +1,5 @@
-﻿using Spectre.Console;
+﻿using PakInspector.Parser;
+using Spectre.Console;
 using Spectre.Console.Rendering;
 using System.Text.Json;
 using System.Text.Json.Serialization;

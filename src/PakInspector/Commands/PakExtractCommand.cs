@@ -1,4 +1,5 @@
 ﻿using PakInspector.Data;
+using PakInspector.Parser;
 using Spectre.Console;
 using Spectre.Console.Cli;
 using System.ComponentModel;

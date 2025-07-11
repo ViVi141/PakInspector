@@ -1,4 +1,5 @@
 ﻿using PakInspector.Data;
+using PakInspector.Parser;
 
 namespace PakInspector;
 

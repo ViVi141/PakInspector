@@ -1,11 +1,7 @@
-﻿using Spectre.Console;
+﻿using PakInspector.Parser;
+using Spectre.Console;
 using Spectre.Console.Cli;
-using System;
-using System.Collections.Generic;
 using System.ComponentModel;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace PakInspector.Commands;
 
@@ -27,7 +23,7 @@ internal class ChunksCommand : Command<ChunksCommand.Settings>
 
     public override int Execute(CommandContext context, Settings settings)
     {
-        var file = Iff.FromFile(settings.FilePath);
+        var file =  Iff.FromFile(settings.FilePath);
 
         var table = new Table();
         table.Title($"Form type: {file.FormType}");

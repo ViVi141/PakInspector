@@ -13,9 +13,12 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="KaitaiStruct.Runtime.CSharp" Version="0.10.0" />
     <PackageReference Include="Spectre.Console" Version="0.50.0" />
     <PackageReference Include="Spectre.Console.Cli" Version="0.50.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\PakInspector.Parser\PakInspector.Parser.csproj" />
   </ItemGroup>
 
 </Project>
