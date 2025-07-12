@@ -12,6 +12,10 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
 
+  <PropertyGroup>
+    <JsonSerializerIsReflectionEnabledByDefault>false</JsonSerializerIsReflectionEnabledByDefault>
+  </PropertyGroup>
+
   <ItemGroup>
     <PackageReference Include="Spectre.Console" Version="0.50.0" />
     <PackageReference Include="System.CommandLine" Version="2.0.0-beta5.25306.1" />

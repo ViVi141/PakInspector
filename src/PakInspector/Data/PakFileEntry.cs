@@ -62,6 +62,7 @@ internal class BytesToHexJsonConverter : JsonConverter<byte[]>
 
     public override void Write(Utf8JsonWriter writer, byte[] value, JsonSerializerOptions options)
     {
-        JsonSerializer.Serialize(writer, BitConverter.ToString(value).Replace("-", ""), options);
+        var hexStr = BitConverter.ToString(value).Replace("-", "");
+        JsonSerializer.Serialize(writer, hexStr, typeof(string), options);
     }
 }

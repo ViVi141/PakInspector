@@ -153,12 +153,7 @@ internal static class PakInspectCommand
     private static void SaveReport(string name, PakReport report)
     {
         using var output = File.Create($"{name}.json");
-        var options = new JsonSerializerOptions()
-        {
-            PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
-            WriteIndented = true
-        };
-        JsonSerializer.Serialize(output, report, options);
+        JsonSerializer.Serialize(output, report, typeof(PakReport), SourceGenerationContext.Default);
     }
 
 }
