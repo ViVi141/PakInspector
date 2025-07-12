@@ -14,18 +14,9 @@ This is a proof of concept implementation aimed at investigating and addressing 
 - View chunks of arbitrary Interchange File Format files;
   - Extracting chunks isn't currently supported, but this feature may be added later.
 
-## Requirements
-
-**This program requires [.NET 8](https://dotnet.microsoft.com/en-us/download/dotnet/8.0) to run**.
-
-On Windows 11 you can easily install it with `winget`:
-```
-winget install Microsoft.DotNet.DesktopRuntime.8
-```
-
 ## Installation
 
-PakInspector does not require installation. Simply download `.exe` from the latest release and start using it! For convenience, you may want to [add](https://stackoverflow.com/questions/9546324/adding-a-directory-to-the-path-environment-variable-in-windows) your PakInspector location to the `PATH`.
+PakInspector does not require installation. Simply download `PakInspector.exe` from the [latest release](https://github.com/rvost/PakInspector/releases/latest) and start using it! For convenience, you may want to [add](https://stackoverflow.com/questions/9546324/adding-a-directory-to-the-path-environment-variable-in-windows) your PakInspector location to the `PATH`.
 
 Sometimes you may get a warning from Windows Defender or other anti-virus software. You can safely ignore it. This is because PakInspector is not a properly signed application.
 
