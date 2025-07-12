@@ -25,7 +25,7 @@ jobs:
 
       - name: Publish
         run: >
-          dotnet publish ${{ env.PROJECT_PATH }} -c Release -o ".\publish" -r win-x64 --no-restore
+          dotnet publish ${{ env.PROJECT_PATH }} -c Release -o ".\publish" --no-restore /p:Version="${{github.ref_name}}"
 
       - name: Create release
         uses: "marvinpinto/action-automatic-releases@latest"
