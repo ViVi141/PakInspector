@@ -1,29 +1,32 @@
 ﻿using PakInspector.Parser;
 using Spectre.Console;
-using Spectre.Console.Cli;
-using System.ComponentModel;
+using System.CommandLine;
 
 namespace PakInspector.Commands;
 
-internal class ChunksCommand : Command<ChunksCommand.Settings>
+internal static class ChunksCommand
 {
-    public sealed class Settings : CommandSettings
+    public static Command Command
     {
-        [Description("Path to file.")]
-        [CommandArgument(0, "<filePath>")]
-        public string FilePath { get; init; }
-
-        public override ValidationResult Validate()
+        get
         {
-            return Path.Exists(FilePath)
-                ? ValidationResult.Success()
-                : ValidationResult.Error($"File {FilePath} does not exist");
+            var fileArg = new Argument<FileInfo>("file")
+            {
+                Description = "Path to file"
+            };
+            fileArg.AcceptExistingOnly();
+
+            var cmd = new Command("chunks", "List chunks in IFF file.");
+            cmd.Arguments.Add(fileArg);
+            cmd.SetAction(parseResult => Execute(parseResult.GetValue(fileArg)));
+
+            return cmd;
         }
     }
 
-    public override int Execute(CommandContext context, Settings settings)
+    public static int Execute(FileInfo fileInfo)
     {
-        var file =  Iff.FromFile(settings.FilePath);
+        var file = Iff.FromFile(fileInfo.FullName);
 
         var table = new Table();
         table.Title($"Form type: {file.FormType}");

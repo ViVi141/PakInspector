@@ -1,50 +1,72 @@
 ﻿using PakInspector.Data;
 using PakInspector.Parser;
 using Spectre.Console;
-using Spectre.Console.Cli;
-using System.ComponentModel;
+using System.CommandLine;
 using System.Text.Json;
 
 namespace PakInspector.Commands;
 
-internal class PakInspectCommand : Command<PakInspectCommand.Settings>
+internal static class PakInspectCommand
 {
-    public sealed class Settings : CommandSettings
+
+    public static Command Command
     {
-        [Description("Path to file.")]
-        [CommandArgument(0, "<filePath>")]
-        public string FilePath { get; init; }
-
-        [Description("Display files as tree")]
-        [CommandOption("-t|--tree")]
-        public bool ShowTree { get; init; }
-
-        [Description("Display all file info")]
-        [CommandOption("-a|--all")]
-        public bool ShowAllInfo { get; init; }
-
-        [Description("Save inspection results")]
-        [CommandOption("-s|--save")]
-        public bool Save { get; init; }
-
-        [Description("Do not print to the console")]
-        [CommandOption("-q|--quiet")]
-        public bool Quiet { get; init; }
-
-
-        public override ValidationResult Validate()
+        get
         {
-            return Path.Exists(FilePath)
-                ? ValidationResult.Success()
-                : ValidationResult.Error($"File {FilePath} does not exist");
+            var fileArg = new Argument<FileInfo>("file")
+            {
+                Description = "Path to file"
+            };
+            fileArg.AcceptExistingOnly();
+
+            var showTreeOption = new Option<bool>("--tree", "-t")
+            {
+                Description = "Display files as tree"
+            };
+
+            var showAllInfoOption = new Option<bool>("--all", "-a")
+            {
+                Description = "Display all file info"
+            };
+
+            var saveOption = new Option<bool>("--save", "-s")
+            {
+                Description = "Save inspection results"
+            };
+
+            var quietOption = new Option<bool>("--quiet", "-q")
+            {
+                Description = "Do not print to the console"
+            };
+
+            var cmd = new Command("inspect", "Inspect contents of the PAC1 file.");
+            cmd.Arguments.Add(fileArg);
+            cmd.Options.Add(showTreeOption);
+            cmd.Options.Add(showAllInfoOption);
+            cmd.Options.Add(saveOption);
+            cmd.Options.Add(quietOption);
+
+            cmd.SetAction(parseResult => Execute(
+                parseResult.GetValue(fileArg),
+                parseResult.GetValue(showTreeOption),
+                parseResult.GetValue(showAllInfoOption),
+                parseResult.GetValue(saveOption),
+                parseResult.GetValue(quietOption)
+                ));
+
+            return cmd;
         }
     }
 
-    public override int Execute(CommandContext context, Settings settings)
+    public static int Execute(FileInfo fileInfo,
+                              bool showTree,
+                              bool showAllInfo,
+                              bool saveResults,
+                              bool quiet)
     {
-        var file = AnsiConsole.Status().Start("Parsing .pak...", ctx => Pak.FromFile(settings.FilePath));
+        var file = AnsiConsole.Status().Start("Parsing .pak...", ctx => Pak.FromFile(fileInfo.FullName));
 
-        var name = Path.GetFileNameWithoutExtension(settings.FilePath);
+        var name = Path.GetFileNameWithoutExtension(fileInfo.FullName);
 
         if (file.Chunks.First(c => c.TypeId == Pak.Chunk.ChunkType.Head).Body is not Pak.HeadChunk headChunk)
         {
@@ -52,7 +74,7 @@ internal class PakInspectCommand : Command<PakInspectCommand.Settings>
         }
 
         var headContent = Convert.ToBase64String(headChunk.Header);
-        if (!settings.Quiet)
+        if (!quiet)
         {
             AnsiConsole.Write(new Markup($"Pak header:\t[orange1]{headContent}[/]\n\n"));
         }
@@ -65,19 +87,19 @@ internal class PakInspectCommand : Command<PakInspectCommand.Settings>
         var files = AnsiConsole.Status().Start("Parsing file tree...", ctx => PakUtils.GetFiles(fileChunk.Root, "").ToList());
         AnsiConsole.Write(new Markup($"Pak contains [orange1]{files.Count}[/] file(s)\n\n"));
 
-        if (!settings.Quiet)
+        if (!quiet)
         {
-            if (settings.ShowTree)
+            if (showTree)
             {
                 DisplayFileTree(name, fileChunk);
             }
             else
             {
-                DisplayFileList(files, settings.ShowAllInfo);
+                DisplayFileList(files, showAllInfo);
             }
         }
 
-        if (settings.Save)
+        if (saveResults)
         {
             AnsiConsole.Status().Start("Saving inspection results...", ctx => SaveReport(name, new(headContent, files)));
         }

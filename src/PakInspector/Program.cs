@@ -1,16 +1,9 @@
 ﻿using PakInspector.Commands;
-using Spectre.Console.Cli;
+using System.CommandLine;
 
-var app = new CommandApp();
-app.Configure(config =>
-{
-    config.AddCommand<ChunksCommand>("chunks");
-    config.AddCommand<PakInspectCommand>("inspect");
-    config.AddCommand<PakExtractCommand>("extract");
-#if DEBUG
-    config.PropagateExceptions();
-    config.ValidateExamples();
-#endif
-});
+var rootCommand = new RootCommand("Viewer and extractor for Arma Reforger .pak files");
+rootCommand.Subcommands.Add(ChunksCommand.Command);
+rootCommand.Subcommands.Add(PakInspectCommand.Command);
+rootCommand.Subcommands.Add(PakExtractCommand.Command);
 
-app.Run(args);
+return rootCommand.Parse(args).Invoke();

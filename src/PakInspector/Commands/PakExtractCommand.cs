@@ -1,60 +1,82 @@
 ﻿using PakInspector.Data;
 using PakInspector.Parser;
 using Spectre.Console;
-using Spectre.Console.Cli;
-using System.ComponentModel;
+using System.CommandLine;
 using System.IO.Compression;
 
 namespace PakInspector.Commands;
 
-internal class PakExtractCommand : Command<PakExtractCommand.Settings>
+internal static class PakExtractCommand
 {
-    public sealed class Settings : CommandSettings
+    public static Command Command
     {
-        [Description("Path to file.")]
-        [CommandArgument(0, "<filePath>")]
-        public string FilePath { get; init; }
-
-        [Description("Path to output directory.")]
-        [CommandArgument(1, "[outputDir]")]
-        public string? OutputPath { get; init; }
-
-        [Description("Files to extract. Use paths as specified in inspection results.")]
-        [CommandOption("-f|--file <VALUES>")]
-        public string[]? Files { get; init; }
-
-        [Description("Extract files without processing.")]
-        [CommandOption("-r|--raw")]
-        public bool CopyRaw { get; init; }
-        public override ValidationResult Validate()
+        get
         {
-            return Path.Exists(FilePath)
-                ? ValidationResult.Success()
-                : ValidationResult.Error($"File {FilePath} does not exist");
+            var fileArg = new Argument<FileInfo>("file")
+            {
+                Description = "Path to file"
+            };
+            fileArg.AcceptExistingOnly();
+
+            var outputArg = new Argument<string?>("outputDir")
+            {
+                Description = "Path to output directory",
+                DefaultValueFactory = res => string.Empty
+            };
+            outputArg.AcceptLegalFilePathsOnly();
+
+            var filesOption = new Option<string[]>("--file", "-f")
+            {
+                Description = "Files to extract. Use paths as specified in inspection results",
+                AllowMultipleArgumentsPerToken = true
+            };
+
+            var copyRawOption = new Option<bool>("--raw", "-r")
+            {
+                Description = "Extract files without processing"
+            };
+
+            var cmd = new Command("extract", "Extract files from the PAC1 file.");
+            cmd.Arguments.Add(fileArg);
+            cmd.Arguments.Add(outputArg);
+            cmd.Options.Add(filesOption);
+            cmd.Options.Add(copyRawOption);
+
+            cmd.SetAction(parseResult => Execute(
+                parseResult.GetValue(fileArg),
+                parseResult.GetValue(outputArg),
+                parseResult.GetValue(filesOption),
+                parseResult.GetValue(copyRawOption)));
+
+            return cmd;
         }
     }
 
-    public override int Execute(CommandContext context, Settings settings)
+    public static int Execute(FileInfo fileInfo,
+                              string? outputPath,
+                              string[]? files,
+                              bool copyRaw)
     {
-        var pak = AnsiConsole.Status().Start("Parsing .pak...", ctx => Pak.FromFile(settings.FilePath));
+        var pak = AnsiConsole.Status().Start("Parsing .pak...", ctx => Pak.FromFile(fileInfo.FullName));
 
-        var fileName = Path.GetFileNameWithoutExtension(settings.FilePath);
-        var outputDir = string.IsNullOrEmpty(settings.OutputPath) ? fileName : settings.OutputPath;
+        var fileName = Path.GetFileNameWithoutExtension(fileInfo.FullName);
+        var outputDir = string.IsNullOrEmpty(outputPath) ? fileName : outputPath;
 
         if (pak.Chunks.First(c => c.TypeId == Pak.Chunk.ChunkType.File).Body is not Pak.FileChunk fileChunk)
         {
             throw new Exception("Failed to parse file chunk");
         }
 
-        var files = AnsiConsole.Status()
+        var pakFiles = AnsiConsole.Status()
             .Start("Parsing file tree...", ctx => PakUtils.GetFiles(fileChunk.Root, "").ToDictionary(f => f.Path));
-        List<PakFileEntry> filesToExtract = settings.Files is not null
-            ? [.. settings.Files
-                .Where(f => files.ContainsKey(f))
-                .Select(f => files[f])]
-            : [.. files.Values];
 
-        ExtractFiles(outputDir, filesToExtract, settings.CopyRaw);
+        List<PakFileEntry> filesToExtract = files is not null && files.Length > 0
+            ? [.. files
+                .Where(f => pakFiles.ContainsKey(f))
+                .Select(f => pakFiles[f])]
+            : [.. pakFiles.Values];
+
+        ExtractFiles(outputDir, filesToExtract, copyRaw);
 
         return 0;
     }
