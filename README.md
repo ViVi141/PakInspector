@@ -1,60 +1,66 @@
 # PakInspector
 
-PakInspector is simple CLI tool for exploring and extracting Arma Reforger's PAC1 files.
+用于浏览与解压 **《Arma Reforger》PAC1 格式 `.pak` 包** 的 Python 工具，带 **Tkinter 图形界面**（标准库，无额外依赖）。
 
----
+## 仓库与上游
 
-This is a proof of concept implementation aimed at investigating and addressing the issues with existing tools ([\[1\]](https://github.com/FlipperPlz/PakExplorer/issues/5), [\[2\]](https://github.com/Rendszerguru/PakEntpacker/issues/1)). If you encounter similar problems, please share the results obtained using the command `PakInspector inspect <file> --save`.
+- **本项目（维护中的 Python 版）**：[https://github.com/ViVi141/PakInspector](https://github.com/ViVi141/PakInspector)
+- **原项目（C# / Kaitai 版）**：[https://github.com/rvost/PakInspector](https://github.com/rvost/PakInspector)
 
-## Features
+本仓库在 [rvost/PakInspector](https://github.com/rvost/PakInspector) 的基础上改写为纯 Python 实现并加入 GUI；格式与解压逻辑仍面向同一 PAC1 生态。若你更关心上游发布与历史 Issue，请优先查看原仓库。
 
-- View the file structure inside Arma Reforger's `.pak` files;
-- Extract all the content from the `.pak` file, or just specific files;
-  - If the file is compressed using an unknown algorithm, you can extract the raw file section for analysis
-- View chunks of arbitrary Interchange File Format files;
-  - Extracting chunks isn't currently supported, but this feature may be added later.
+## 功能
 
-## Installation
+- **打开文件夹**：扫描 `.pak`；勾选 **「包含子目录」** 时会递归收集子文件夹内所有分包，并在界面中 **合并为一套项目树**（同名路径以后解析到的分包为准）；未勾选时仅载入当前目录下排序后的 **第一个** `.pak`
+- **打开单个 .pak**：仍支持单文件浏览
+- 查看合并树或单包内的文件与元数据（详情中含 `sourcePak`，标明条目来自哪个 `.pak`）
+- 导出全部或选中子树（按条目所属分包从对应文件解压）；支持「原始导出」（不解压）
+- 支持压缩类型：`0`（存储）、`0x106`（zlib 风格头 + DEFLATE，与常见 Reforger 资源一致）
+- 保存 JSON 报告：单包时含 `head`；多包合并时含 `sources`（每包 `pakPath` + `head`）及 `files[].sourcePak`
+- 附加页：列出任意 **IFF / FORM** 文件的块（TypeId、Length）
 
-PakInspector does not require installation. Simply download `PakInspector.exe` from the [latest release](https://github.com/rvost/PakInspector/releases/latest) and start using it! For convenience, you may want to [add](https://stackoverflow.com/questions/9546324/adding-a-directory-to-the-path-environment-variable-in-windows) your PakInspector location to the `PATH`.
+## 限制
 
-Sometimes you may get a warning from Windows Defender or other anti-virus software. You can safely ignore it. This is because PakInspector is not a properly signed application.
+- 解析与导出会将**整个 `.pak` 读入内存**，占用大致与文件大小相当（与早期 POC 行为一致）。
+- 未知压缩类型需在 `pakinspector/extract.py` 中扩展。
 
-## Usage examples
+## 环境要求
 
-- Extract all files from `data.pak` to `output` folder:
-  ```
-    .\PakInspector extract data.pak output
-  ```
-- Extract `foo\bar.xob` and `foo\bazz.xob`  from `data.pak` to `output` folder:
-  ```
-    .\PakInspector extract data.pak output -f "foo\bar.xob" -f "foo\bazz.xob"
-  ```
-  Please note that you must specify `-f` (or `--file`) key before each filename. The filename must match one of those returned by the 'inspect' command.
-- Show file tree for `data.pak`
-  ```
-  .\PakInspector inspect data.pak --tree
-  ```
-- Inspect `data.pak` and save results without printing to console
-  ```
-  .\PakInspector inspect data.pak -qs
-  ```
+- Python **3.10+**
+- 带 **Tk** 的 Python（Windows 官方安装包默认包含；部分 Linux 需安装 `python3-tk`）
 
-You can also use the `--help` key to view all the available commands and options.
+## 安装与运行
 
-## Issues
+在仓库根目录：
 
-If you find a bug or have a feature request, please use [Issues](https://github.com/rvost/PakInspector/issues) to report it. Samples of the `.pak` files that the tool fails to extract are needed. If you have encountered this problem, please post your *inspection results* in the Issues or send me a message on Discord.
+```bash
+pip install .
+pakinspector
+```
 
-### Known issues
+或直接运行模块（无需安装时，请在仓库根目录执行，以便解析包路径）：
 
-As the current POC implementation prioritizes the ease of development and clarity provided by Kaitai Struct over parser performance, high RAM usage is expected. 
-RAM usage for inspection and extraction operations is comparable to the size of the `.pak` file.
+```bash
+python -m pakinspector
+```
 
-## Contribution
+## 从源码构建发行包
 
-All contributions are welcome! If you have any plans for improving the parser, please use the `formats/pak.ksy` file as a starting point and avoid modifying the *generated* parser code.
+```bash
+pip install build
+python -m build
+```
 
-## Acknowledgments
+产物在 `dist/`（wheel 与 sdist）。
 
-This tool relies heavily on [@FlipperPlz](https://github.com/FlipperPlz/)'s work in [PakExplorer](https://github.com/FlipperPlz/PakExplorer), the first open source tool for reading `PAC1` files.
+## 问题反馈
+
+Bug 与功能建议请在本仓库 [Issues](https://github.com/ViVi141/PakInspector/issues) 提出。若涉及与上游 C# 版行为是否一致，可对照 [rvost/PakInspector](https://github.com/rvost/PakInspector) 的说明与发布。
+
+## 致谢
+
+PAC1 相关探索离不开社区既有工具与资料；原 C# 实现及讨论见 [rvost/PakInspector](https://github.com/rvost/PakInspector)，其 README 亦致谢了 [@FlipperPlz](https://github.com/FlipperPlz) 的 [PakExplorer](https://github.com/FlipperPlz/PakExplorer) 等先行工作。
+
+## 许可证
+
+Apache License 2.0，见仓库根目录 `LICENSE`。
