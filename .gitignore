@@ -11,6 +11,9 @@ ENV/
 # setuptools / build
 build/
 dist/
+
+# PyInstaller（由 build-exe.ps1 生成）
+PakInspector.spec
 *.egg-info/
 .eggs/
 
