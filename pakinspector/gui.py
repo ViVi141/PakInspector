@@ -186,6 +186,7 @@ class PakInspectorApp(tk.Tk):
         self._last_folder: Optional[str] = None
         self._load_generation: int = 0
 
+        self.protocol("WM_DELETE_WINDOW", self._on_delete_window)
         self._build_widgets()
 
     def _build_widgets(self) -> None:
@@ -476,6 +477,16 @@ class PakInspectorApp(tk.Tk):
             return
         self._apply_bundles(bundles, label_hint, merged=merged)
 
+    @staticmethod
+    def _close_parsed_bundles(bundles: List[Tuple[str, ParsedPak]]) -> None:
+        for _path, parsed in bundles:
+            parsed.close()
+
+    def _on_delete_window(self) -> None:
+        self._close_parsed_bundles(self._bundle)
+        self._bundle = []
+        self.destroy()
+
     def _apply_bundles(
         self,
         bundles: List[Tuple[str, ParsedPak]],
@@ -483,6 +494,7 @@ class PakInspectorApp(tk.Tk):
         merged: bool,
     ) -> None:
         """Rebuild tree and flat file list from one or more parsed paks."""
+        self._close_parsed_bundles(self._bundle)
         self._bundle = list(bundles)
         for item in self._tree.get_children():
             self._tree.delete(item)

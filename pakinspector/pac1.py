@@ -3,10 +3,10 @@
 
 from __future__ import annotations
 
+import mmap
 import struct
 from dataclasses import dataclass, field
-from typing import Iterator, List, Optional, Union
-
+from typing import BinaryIO, Iterator, List, Optional, Union
 
 _FORM_MAGIC = b"FORM"
 _PAC1_MAGIC = b"PAC1"
@@ -15,6 +15,9 @@ _PAC1_MAGIC = b"PAC1"
 CHUNK_HEAD = 0x44414548  # HEAD
 CHUNK_DATA = 0x41544144  # DATA
 CHUNK_FILE = 0x454C4946  # FILE
+
+# Whole-file buffer used for parsing and payload slices (bytes or read-only mmap).
+BackingBuffer = Union[bytes, mmap.mmap]
 
 
 class PakFormatError(ValueError):
@@ -29,10 +32,11 @@ class HeadChunk:
 
 
 @dataclass
-class DataChunk:
-    """DATA chunk payload."""
+class DataChunkRef:
+    """DATA chunk body location in the backing buffer (no copy of large payload)."""
 
-    content: bytes
+    abs_start: int
+    length: int
 
 
 @dataclass
@@ -70,11 +74,12 @@ class FileChunk:
 
 
 @dataclass
-class RawChunk:
-    """Unknown chunk type."""
+class RawChunkRef:
+    """Unknown chunk type body location in the backing buffer."""
 
     type_id: int
-    body: bytes
+    abs_start: int
+    length: int
 
 
 @dataclass
@@ -82,15 +87,27 @@ class Chunk:
     """Top-level PAC1 chunk wrapper."""
 
     type_id: int
-    body: Union[HeadChunk, DataChunk, FileChunk, RawChunk]
+    body: Union[HeadChunk, DataChunkRef, FileChunk, RawChunkRef]
 
 
 @dataclass
 class ParsedPak:
-    """Fully parsed .pak with raw bytes kept for resolving file data offsets."""
+    """Fully parsed .pak with backing store for resolving file data offsets."""
 
-    raw: bytes
+    _backing: BackingBuffer
     chunks: List[Chunk]
+    _file_handle: Optional[BinaryIO] = field(default=None, repr=False)
+    _closed: bool = field(default=False, repr=False)
+
+    @property
+    def backing(self) -> BackingBuffer:
+        """Whole-file buffer (bytes or mmap)."""
+        return self._backing
+
+    @property
+    def raw(self) -> BackingBuffer:
+        """Alias of ``backing`` for callers that slice ``pak.raw``."""
+        return self._backing
 
     def head_chunk(self) -> Optional[HeadChunk]:
         for c in self.chunks:
@@ -104,27 +121,39 @@ class ParsedPak:
                 return c.body
         return None
 
+    def close(self) -> None:
+        """Release mmap and file handle when this pak was loaded from disk."""
+        if self._closed:
+            return
+        self._closed = True
+        buf = self._backing
+        if isinstance(buf, mmap.mmap):
+            buf.close()
+        if self._file_handle is not None:
+            self._file_handle.close()
+            self._file_handle = None
 
-def _read_u1(data: bytes, pos: int) -> tuple[int, int]:
+
+def _read_u1(data: BackingBuffer, pos: int) -> tuple[int, int]:
     return data[pos], pos + 1
 
 
-def _read_u4le(data: bytes, pos: int) -> tuple[int, int]:
+def _read_u4le(data: BackingBuffer, pos: int) -> tuple[int, int]:
     (value,) = struct.unpack_from("<I", data, pos)
     return int(value), pos + 4
 
 
-def _read_u4be(data: bytes, pos: int) -> tuple[int, int]:
+def _read_u4be(data: BackingBuffer, pos: int) -> tuple[int, int]:
     (value,) = struct.unpack_from(">I", data, pos)
     return int(value), pos + 4
 
 
-def _read_utf8_name(data: bytes, pos: int, length: int) -> tuple[str, int]:
+def _read_utf8_name(data: BackingBuffer, pos: int, length: int) -> tuple[str, int]:
     raw = data[pos : pos + length]
     return raw.decode("utf-8"), pos + length
 
 
-def _parse_pak_entry(data: bytes, pos: int) -> tuple[PakEntry, int]:
+def _parse_pak_entry(data: BackingBuffer, pos: int) -> tuple[PakEntry, int]:
     entry_type, pos = _read_u1(data, pos)
     name_len, pos = _read_u1(data, pos)
     name, pos = _read_utf8_name(data, pos, name_len)
@@ -161,8 +190,8 @@ def _parse_file_chunk_body(body: bytes) -> FileChunk:
     return FileChunk(root=root)
 
 
-def parse_pak_bytes(data: bytes) -> ParsedPak:
-    """Parse a PAC1 blob from memory."""
+def _parse_chunks_from_buffer(data: BackingBuffer) -> List[Chunk]:
+    """Parse PAC1 chunks from a bytes or mmap whole-file buffer."""
     if len(data) < 12:
         raise PakFormatError("File too small")
     if data[0:4] != _FORM_MAGIC:
@@ -171,35 +200,56 @@ def parse_pak_bytes(data: bytes) -> ParsedPak:
         raise PakFormatError("Expected PAC1 form type")
     pos = 12
     chunks: List[Chunk] = []
-    while pos < len(data):
-        if pos + 8 > len(data):
+    data_len = len(data)
+    while pos < data_len:
+        if pos + 8 > data_len:
             raise PakFormatError("Truncated chunk header")
         type_id, pos = _read_u4le(data, pos)
         length, pos = _read_u4be(data, pos)
-        if pos + length > len(data):
+        if pos + length > data_len:
             raise PakFormatError("Truncated chunk body")
-        body = data[pos : pos + length]
+        body_start = pos
         pos += length
 
         if type_id == CHUNK_HEAD:
-            parsed_body: Union[HeadChunk, DataChunk, FileChunk, RawChunk] = HeadChunk(
-                header=body
+            body_slice = data[body_start : body_start + length]
+            parsed_body: Union[HeadChunk, DataChunkRef, FileChunk, RawChunkRef] = (
+                HeadChunk(header=bytes(body_slice))
             )
         elif type_id == CHUNK_DATA:
-            parsed_body = DataChunk(content=body)
+            parsed_body = DataChunkRef(abs_start=body_start, length=length)
         elif type_id == CHUNK_FILE:
-            parsed_body = _parse_file_chunk_body(body)
+            body_slice = data[body_start : body_start + length]
+            parsed_body = _parse_file_chunk_body(bytes(body_slice))
         else:
-            parsed_body = RawChunk(type_id=type_id, body=body)
+            parsed_body = RawChunkRef(
+                type_id=type_id, abs_start=body_start, length=length
+            )
         chunks.append(Chunk(type_id=type_id, body=parsed_body))
-    return ParsedPak(raw=data, chunks=chunks)
+    return chunks
+
+
+def parse_pak_bytes(data: bytes) -> ParsedPak:
+    """Parse a PAC1 blob from memory (bytes backing; DATA/raw chunks are not copied)."""
+    chunks = _parse_chunks_from_buffer(data)
+    return ParsedPak(_backing=data, chunks=chunks, _file_handle=None)
 
 
 def parse_pak_file(path: str) -> ParsedPak:
-    """Read a .pak path as binary and parse."""
-    with open(path, "rb") as handle:
-        data = handle.read()
-    return parse_pak_bytes(data)
+    """Memory-map a .pak path read-only, parse, and return a ParsedPak that owns the map."""
+    handle = open(path, "rb")
+    try:
+        mm = mmap.mmap(handle.fileno(), 0, access=mmap.ACCESS_READ)
+    except OSError:
+        handle.close()
+        raise
+    try:
+        chunks = _parse_chunks_from_buffer(mm)
+    except Exception:
+        mm.close()
+        handle.close()
+        raise
+    return ParsedPak(_backing=mm, chunks=chunks, _file_handle=handle)
 
 
 def iter_file_entries(entry: PakEntry, base_path: str) -> Iterator[tuple[str, FileInfo]]:
@@ -221,6 +271,7 @@ def iter_file_entries(entry: PakEntry, base_path: str) -> Iterator[tuple[str, Fi
 def read_file_blob(pak: ParsedPak, finfo: FileInfo) -> bytes:
     """Read compressed (or stored) bytes from the outer .pak using absolute offset."""
     end = finfo.offset + finfo.compressed_length
-    if end > len(pak.raw):
+    buf = pak.raw
+    if end > len(buf):
         raise PakFormatError("File data out of range")
-    return pak.raw[finfo.offset : end]
+    return bytes(buf[finfo.offset : end])
